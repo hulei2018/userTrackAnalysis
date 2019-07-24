@@ -4,6 +4,7 @@ import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 
 import com.alibaba.fastjson.JSONObject
+import com.usertrack.constant.Constants
 import com.usertrack.util.DateUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.rdd.RDD
@@ -13,13 +14,14 @@ import org.apache.spark.{SparkConf, SparkContext}
 import scala.collection.mutable.ArrayBuffer
 
 /**
+  * @author: Jeremy Hu
   * 模拟测试数据
   */
 object MockDataUtils {
   val random = ThreadLocalRandom.current()
   val splitSymbol = ","
   // 用户数量
-  val userNumbers = 1000
+  val userNumbers = 100000
   // 用户每天访问的PV数量上限(50万)
   val userVisitSessionNumbers = 500000
   // 商品数量（100万）
@@ -48,8 +50,8 @@ object MockDataUtils {
     val sc = SparkContext.getOrCreate(conf)
     // ===========================
     val fs = FileSystem.get(sc.hadoopConfiguration)   //HDFS
-    val userInfoDataSavePath = "/spark/project/data/mock/user_info"
-    val userVisitActionSavePath = "/spark/project/data/mock/user_visit_action"
+    val userInfoDataSavePath = "data/mock/user_info"
+    val userVisitActionSavePath = "data/mock/user_visit_action"
     fs.delete(new Path(userInfoDataSavePath), true)
     fs.delete(new Path(userVisitActionSavePath), true)
 

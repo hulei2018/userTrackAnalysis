@@ -3,6 +3,8 @@ package com.usertrack.mock
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
+import com.usertrack.conf.ConfigurationManager
+import com.usertrack.constant.Constants
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 
 import scala.collection.mutable.ArrayBuffer
@@ -10,7 +12,7 @@ import scala.util.Random
 
 /**
   * 模拟产生广告点击数据
-  * Created by ibf on 03/16.
+  * Created by Jeremy Hu on 07/19.
   */
 object AdClickDataMock {
   // 分割字符串
