@@ -1,8 +1,10 @@
 package com.usertrack.spark.session
 
+import com.usertrack.conf.ConfigurationManager
 import com.usertrack.dao.factory.TaskFactory
 import com.usertrack.util.ParamUtils
 import com.usertrack.constant.Constants
+import com.usertrack.spark.util.SparkUtils
 
 /**
   * @author: Jeremy Hu
@@ -32,8 +34,10 @@ object UserVisitActionAnalyzerSpark {
     }
     // 4.创建spark的运行环境
     val appName=Constants.SPARK_APP_NAME+taskID;
-    val islocal=
-    val spark=
+    val islocal=ConfigurationManager.getBoolean(Constants.ISLOCAL)
+    val conf=SparkUtils
+    val spark=SparkUtils.generateSparkConf(appName,islocal)
+
 
   }
 }

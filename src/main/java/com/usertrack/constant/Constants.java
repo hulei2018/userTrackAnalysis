@@ -12,4 +12,5 @@ public interface Constants {
     String JDBC_PASSWORD="jdbc_password";
     String JDBC_DATASOURCE_SIZE="jdbc_datasource_size";
     String SPARK_APP_NAME="userTrackAnalysis";
+    String ISLOCAL="is_local";
 }

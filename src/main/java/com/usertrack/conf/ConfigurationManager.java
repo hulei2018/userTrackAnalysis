@@ -1,5 +1,7 @@
 package com.usertrack.conf;
 
+import org.apache.calcite.util.Static;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
@@ -25,7 +27,7 @@ public class ConfigurationManager {
     }
 
     /**
-     * @param key String
+     * @para key String
      * @return Integer
      */
 
@@ -33,5 +35,13 @@ public class ConfigurationManager {
         String value=getProperty(key);
         return Integer.parseInt(value);
     }
+    /**
+     * @para key String
+     * @return Boolean
+     */
 
+    public static boolean getBoolean(String key){
+        String value=getProperty(key);
+        return Boolean.valueOf(value);
+    }
 }
