@@ -7,5 +7,5 @@ public interface TaskDao {
      * @para taskID
      * @return task
      */
-    public Task findTaskById(int taskid);
+    public Task findTaskById(Long taskid);
 }

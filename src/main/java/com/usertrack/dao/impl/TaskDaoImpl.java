@@ -9,7 +9,7 @@ import java.sql.ResultSet;
 public class TaskDaoImpl implements TaskDao {
     Task task=null;
     @Override
-    public Task findTaskById(int taskid) {
+    public Task findTaskById(Long taskid) {
         String sql = "select * from tb_task where task_id = ?";
         Object[] params = new Object[]{taskid};
         Jdbc_Help inst = Jdbc_Help.getIntants();
