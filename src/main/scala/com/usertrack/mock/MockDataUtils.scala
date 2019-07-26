@@ -8,7 +8,7 @@ import com.usertrack.constant.Constants
 import com.usertrack.util.DateUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.mutable.ArrayBuffer
@@ -505,7 +505,7 @@ object MockDataUtils {
     * @param sc
     * @param sqlContext
     */
-  def mockData(sc: SparkContext, sqlContext: SQLContext): Unit = {
+  def mockData(sc: SparkContext, spark: SparkSession): Unit = {
     val fs = FileSystem.get(sc.hadoopConfiguration)
     val userInfoDataSavePathStr = "/spark/project/data/mock/user_info"
       val userInfoDataSavePath = new Path(userInfoDataSavePathStr)
@@ -529,19 +529,20 @@ object MockDataUtils {
     val userInfoRDD: RDD[String] = sc.textFile(userInfoDataSavePathStr)
     val userVisitActionRDD: RDD[String] = sc.textFile(userVisitActionSavePathStr)
     // 开始转换为DataFrame并注册成为表
-    import sqlContext.implicits._
+    import spark.implicits._
     userInfoRDD
       .map(line => UserInfo.parseUserInfo(line))
       .filter(_.isDefined)
       .map(_.get)
       .toDF(UserInfo.columnNames: _*)
-      .registerTempTable("user_info")
+      .createTempView("user_info")
+    
     userVisitActionRDD
       .map(line => UserVisitAction.parseUserVisitAction(line)) //RDD[Option[UserInfo]]
       .filter(_.isDefined)
       .map(_.get)   //RDD[UserInfo]
       .toDF(UserVisitAction.columnNames: _*)
-      .registerTempTable("user_visit_action")
+      .createTempView("user_visit_action")
   }
 }
 
