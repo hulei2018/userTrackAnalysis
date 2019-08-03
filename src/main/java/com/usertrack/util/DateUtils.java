@@ -39,6 +39,24 @@ public class DateUtils {
         cld.setTimeInMillis(time);
         return sdf.format(cld.getTime());
     }
+    /**
+     * @param date
+     * @return time
+     */
+    public static long parseDate2Long(String date){
+        return parseString2Long(date,TIME_FORMAT);
+    }
+
+    public static long parseString2Long(String date,String dateFormat){
+        return parseString2Long(date,new SimpleDateFormat(dateFormat));
+    }
+    public static long parseString2Long(String date,SimpleDateFormat sdf){
+        try {
+            return sdf.parse(date).getTime();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     /**
      * 获取一个随机的当天的毫秒级时间戳值，根据给定的随机对象
@@ -63,5 +81,33 @@ public class DateUtils {
         }
         return cal.getTimeInMillis();
 
+    }
+
+    /**
+     * 获取时间类型(类型)
+     */
+    public static enum DateTypeEnum{
+        YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND
+    }
+    public static int getSpecificDateValueOfDateTypeEnum(long mills,DateTypeEnum type){
+        Calendar inst = Calendar.getInstance();
+        inst.setTimeInMillis(mills);
+        switch (type){
+            case YEAR:
+                return inst.get(Calendar.YEAR);
+            case MONTH:
+                return inst.get(Calendar.MONTH)+1;
+            case DAY:
+                return inst.get(Calendar.DAY_OF_MONTH);
+            case HOUR:
+                return inst.get(Calendar.HOUR_OF_DAY);
+            case MINUTE:
+                return inst.get(Calendar.MINUTE);
+            case SECOND:
+                return inst.get(Calendar.SECOND);
+            case MILLISECOND:
+                return inst.get(Calendar.MILLISECOND);
+        }
+       throw new IllegalArgumentException("参数异常<这个异常不应该产生的....>");
     }
 }

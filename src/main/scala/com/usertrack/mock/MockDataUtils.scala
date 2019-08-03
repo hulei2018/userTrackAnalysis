@@ -50,8 +50,8 @@ object MockDataUtils {
     val sc = SparkContext.getOrCreate(conf)
     // ===========================
     val fs = FileSystem.get(sc.hadoopConfiguration)   //HDFS
-    val userInfoDataSavePath = "data/mock/user_info"
-    val userVisitActionSavePath = "data/mock/user_visit_action"
+    val userInfoDataSavePath = "/spark/project/data/mock/user_info"
+    val userVisitActionSavePath = "/spark/project/data/mock/user_visit_action"
     fs.delete(new Path(userInfoDataSavePath), true)
     fs.delete(new Path(userVisitActionSavePath), true)
 
@@ -472,7 +472,7 @@ object MockDataUtils {
     */
   def loadProductInfoMockData(sc: SparkContext, sqlContext: SQLContext): Unit = {
     val fs = FileSystem.get(sc.hadoopConfiguration)
-    val productInfoDataSavePathStr = "data/mock/product_info"
+    val productInfoDataSavePathStr = "/spark/project/data/mock/user_info"
     val productInfoDataSavePath = new Path(productInfoDataSavePathStr)
 
     val productInfoRDD: RDD[ProductInfo] = {
@@ -503,7 +503,7 @@ object MockDataUtils {
     * 产生模拟数据
     *
     * @param sc
-    * @param sqlContext
+    * @param spark
     */
   def mockData(sc: SparkContext, spark: SparkSession): Unit = {
     val fs = FileSystem.get(sc.hadoopConfiguration)
@@ -536,7 +536,7 @@ object MockDataUtils {
       .map(_.get)
       .toDF(UserInfo.columnNames: _*)
       .createTempView("user_info")
-    
+
     userVisitActionRDD
       .map(line => UserVisitAction.parseUserVisitAction(line)) //RDD[Option[UserInfo]]
       .filter(_.isDefined)
