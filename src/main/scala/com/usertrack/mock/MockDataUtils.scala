@@ -21,7 +21,7 @@ object MockDataUtils {
   val random = ThreadLocalRandom.current()
   val splitSymbol = ","
   // 用户数量
-  val userNumbers = 100000
+  val userNumbers = 5000000
   // 用户每天访问的PV数量上限(50万)
   val userVisitSessionNumbers = 500000
   // 商品数量（100万）

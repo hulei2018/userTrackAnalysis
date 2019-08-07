@@ -3,13 +3,17 @@ package com.usertrack.spark.session
 import com.alibaba.fastjson.JSONObject
 import com.usertrack.conf.ConfigurationManager
 import com.usertrack.dao.factory.TaskFactory
-import com.usertrack.util.{DateUtils, ParamUtils}
+import com.usertrack.util.{DateUtils, ParamUtils, StringUtils}
 import com.usertrack.constant.Constants
+import com.usertrack.jdbc.Jdbc_Help
 import com.usertrack.mock.MockDataUtils
-import com.usertrack.spark.util.SparkUtils
+import com.usertrack.spark.util.{JSONUtil, SparkUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.util.{Failure, Success, Try}
+
 
 /**
   * @author: Jeremy Hu
@@ -48,9 +52,9 @@ object UserVisitActionAnalyzerSpark {
     val sc = SparkUtils.generateSparkContext(conf)
 
     //2.3 如果是本地的话读取数据，不用集成enableHive，如果提交到集群数据是存储在Hive中
-    val spark = SparkUtils.loadDatas(islocal, appName, sc, generateMockData = (sc: SparkContext, spark: SparkSession) => {
+    val spark = SparkUtils.loadDatas(islocal, appName, sc, generateMockData = (sc: SparkContext, df: SparkSession) => {
       if (islocal) {
-        MockDataUtils.mockData(sc, spark)
+        MockDataUtils.mockData(sc, df)
       }
     })
 
@@ -165,6 +169,128 @@ object UserVisitActionAnalyzerSpark {
 
     // 保存模块一的结果
     this.saveSessionAggrResult(sc,taskID,totalsessionCount,sessionLengthSum,invalidSessionLength,preSessionLengthLevelSessionCount,dayAndHour2SessionCount,dayAndHour2SessionLength,invalidDayAndHourSessionLength)
+
+    /**
+      *五、计算需求二：
+      *
+      *
+      *
+      */
+
+//    六、需求三: 获取点击、下单、支付次数前10的各个品类的各种操作的次数
+    /**
+      * 点击、下单、支付是三种不同的操作，需求获取每个操作中触发次数最多的前10个品类(最多30个品类)
+      * 对数据先按照操作类型进行分组，然后对每组数据进行计数统计，最后对每组数据进行Top10的结果获取
+      * 这个需求实质上就是一个分组排序TopK的需求
+      * 步骤:
+      * a. 从原始RDD中获取计算所需要的数据
+      * ==> 点击的falg为0；下单为1；支付为2
+      * b. 求各个品类被触发的次数==>wordcount
+      * c. 分组TopN程序-->按照flag进行数据分区，然后对每个分区的数据进行数据获取
+      * TODO: 作业 --> 考虑分组TopN实现过程中，OOM异常的解决代码 & 考虑一下使用SparkSQL如何使用
+      * d. 由于分组TopN后RDD的数据量直接降低到30条数据一下, 所以将分区数更改为1
+      * e. 按照品类id合并三类操作被触发的次数（按理来讲，应该按照categoryID进行数据分区，然后对每组数据进行聚合 => RDD上的操作; 但是由于只有一个分区，调用groupByKeyAPI会存在shuffle过程，这里不太建议直接在rdd上使用groupByKey api; 直接使用mapPartitions， 然后对分区中的数据迭代器进行操作《存在一个分组合并结果的动作》）
+      */
+    val top10CategoryIDAndCountRDD=Session2RecordRdd.flatMap{
+      case(sessionID,records)=>{
+        val iter=records.flatMap(record=>{
+          val clickCategoryid=record.clickCategoryid
+          val orderCategoryids=record.orderCategoryids
+          val payCategoryids=record.payCategoryids
+          if(StringUtils.isNotEmpty(clickCategoryid)){
+               Iterator.single((clickCategoryid,0))  //点击记为0
+          }else if(StringUtils.isNotEmpty(orderCategoryids)){
+            orderCategoryids.split(Constants.SPLIT_CATEGORY_OR_PRODUCT_ID_SEPARATOR_ESCAOE)
+              .filter(_.trim.nonEmpty)
+              .map((_,1))                //下单记为1
+          }else if(StringUtils.isNotEmpty(payCategoryids)){
+            payCategoryids.split(Constants.SPLIT_CATEGORY_OR_PRODUCT_ID_SEPARATOR_ESCAOE)
+              .filter(_.trim.nonEmpty)
+              .map((_,2))              //支付记为2
+          }else{
+            Iterator.empty
+          }
+        })
+        iter.map(x=>(x,1))
+      }
+    }
+      .reduceByKey(_+_)
+      .map(tuple=>(tuple._1._2,(tuple._1._1,tuple._2)))   //((flag,(品类id,count))
+      .groupByKey()
+      .flatMap{
+        case(flag,iter)=>{
+          val top10Category =iter.toList
+                            .sortWith(_._2>_._2)
+                            .slice(0,10)
+          top10Category.map{
+            case(categoryID,count)=>{
+              (categoryID,(flag,count))
+            }
+          }
+        }
+      }
+      .coalesce(1)  //剩下30条数据，所以使用coalesce，而不是进行repartition
+      .mapPartitions(iter=>{
+        iter
+          .toList
+          .groupBy(_._1)
+          .map{
+            case(categoryID,lis)=>{
+              val categoryCount=lis.foldLeft((0,0,0))((a,b)=>{  //对每个categoryID的点击、下单、支付数进行合并
+                b._2._1 match {
+                  case 0 =>(b._2._2,a._2,a._3)
+                  case 1 =>(a._1,b._2._2,a._3)
+                  case 2 =>(a._1,a._2,b._2._2)
+                }
+              })
+              (categoryID,categoryCount)
+            }
+          }.toIterator
+      })
+    top10CategoryIDAndCountRDD.cache()
+
+    //将结果输出到jdbc数据库中，后续补充
+    top10CategoryIDAndCountRDD.foreachPartition(iter=>{
+      val jdbc_helper = Jdbc_Help.getIntants
+      Try{
+        val con=jdbc_helper.getConnection
+        val oldcommit=con.getAutoCommit
+        con.setAutoCommit(false)
+        val sql="INSERT INTO tb_task_top10_category(`task_id`,`category_id`,`click_count`,`order_count`,`pay_count`) VALUES(?,?,?,?,?)"
+        val pstm=con.prepareStatement(sql)
+        var recordCount=0
+        iter.foreach{
+          case (categoryID, (clickCount, orderCount, payCount)) =>{
+            pstm.setLong(1,taskID)
+            pstm.setString(2,categoryID)
+            pstm.setInt(3,clickCount)
+            pstm.setInt(4,orderCount)
+            pstm.setInt(5,payCount)
+            //启动批次
+            pstm.addBatch()
+            recordCount+=1
+            if(recordCount%500==0){
+              pstm.executeBatch()
+              con.commit()
+            }
+          }
+        }
+        //不足500条在单独进行提交
+        pstm.executeBatch()
+        con.commit()
+        (oldcommit,con)
+      }match {
+        case Success((oldcommit,con))=>{
+          con.setAutoCommit(oldcommit)
+          jdbc_helper.returnConnetion(con)
+        }
+        case Failure(exception)=>{
+          jdbc_helper.returnConnetion(null)
+          throw exception
+        }
+      }
+    })
+
   }
 
   def filterData(spark: SparkSession, taskParam: JSONObject): RDD[UserVisitSessionRecord] = {
@@ -177,9 +303,9 @@ object UserVisitActionAnalyzerSpark {
     val professionWhereStr = professions
       .map(v => {
         val str = v.split(",")
-          .map(m => s"'{$m}'")
+          .map(m => s"'${m}'")
           .mkString("(", ",", ")")
-        s"and ui.profession in ${str}"
+        s"and ui.professional in ${str}"
       }).getOrElse("")
 
     //需要使用join条件
@@ -193,9 +319,9 @@ object UserVisitActionAnalyzerSpark {
          |from user_visit_action uva
          |${needJoinUserInfoTable.map(v => "join user_info ui on uva.user_id=ui.user_id").getOrElse("")}
          |where 1=1
-         |${startDate.map(v => s"and uva.date>'${v}'").getOrElse("")}
-         |${endDate.map(v => s"and uva.date<'${v}'").getOrElse("")}
-         |${sex.map(v => s"and ui.sex=${v}").getOrElse("")}
+         |${startDate.map(v => s"and uva.date>='${v}'").getOrElse("")}
+         |${endDate.map(v => s"and uva.date<='${v}'").getOrElse("")}
+         |${sex.map(v => s"and ui.sex='${v}'").getOrElse("")}
          |${professionWhereStr}
          |
       """.stripMargin
@@ -203,6 +329,7 @@ object UserVisitActionAnalyzerSpark {
 
     //将dataFrame转化为RDD
     val df = spark.sql(hql)
+    df.show()
     val columns = Array("date", "user_id", "session_id", "page_id", "action_time", "search_keyword", "click_category_id", "click_product_id", "order_category_ids", "order_product_ids", "pay_category_ids", "pay_product_ids", "city_id")
     df.rdd.map(v => {
       val date = v.getAs[String](columns(0))
@@ -234,6 +361,9 @@ object UserVisitActionAnalyzerSpark {
                            dayAndHour2SessionLength: Array[((String, Int), Long)],
                            invalidDayAndHourSessionLength: Array[((String, Int), Int)]
                            ): Unit ={
-
+   val json=JSONUtil.mergeSessionAggrResultToJSONString(totalSessionCnt,totalSessionSum,invalidSessionCount,preSessionLengthLevelSessionCount,dayAndHour2SessionCount,dayAndHour2SessionLength,invalidDayAndHourSessionLength)
+//   也可以将json格式进行保存到数据库
+   println(json)
   }
+
 }
