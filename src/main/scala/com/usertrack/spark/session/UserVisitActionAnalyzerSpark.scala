@@ -35,8 +35,8 @@ object UserVisitActionAnalyzerSpark {
     // 4.创建spark的运行环境
     val appName=Constants.SPARK_APP_NAME+taskID;
     val islocal=ConfigurationManager.getBoolean(Constants.ISLOCAL)
-    val conf=SparkUtils
-    val spark=SparkUtils.generateSparkConf(appName,islocal)
+    val conf=SparkUtils.generateSparkConf(appName,islocal)
+    val spark=
 
 
   }
