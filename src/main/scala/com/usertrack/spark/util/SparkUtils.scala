@@ -1,11 +1,8 @@
 package com.usertrack.spark.util
 
-<<<<<<< HEAD
-import org.apache.spark.SparkConf
-=======
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SparkSession
->>>>>>> d1dbf5839b80b229a874fcd0c3cc1ee061f572a5
+
 
 /**
   * @author: Jeremy Hu

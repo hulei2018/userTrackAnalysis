@@ -1,5 +1,8 @@
 package com.usertrack.spark.session
 
+import com.alibaba.fastjson.JSONObject
+
+
 /**
   * @author: hu lei
   * @description: ${description}
@@ -19,5 +22,21 @@ case class UserVisitSessionRecord(date:String,
                                   payProductids:String,
                                   cityId:Int
                                  ) {
-
+  def trans2JsonObject(): JSONObject ={
+    val record = new JSONObject()
+    record.put("date", date)
+    record.put("user_id", userId)
+    record.put("session_id", sessionId)
+    record.put("page_id", pageId)
+    record.put("action_time", actionTime)
+    record.put("search_keyword", searchKeyword)
+    record.put("click_category_id", clickCategoryid)
+    record.put("click_product_id", clickProductid)
+    record.put("order_category_ids", orderCategoryids)
+    record.put("order_product_ids", orderProductids)
+    record.put("pay_category_ids", payCategoryids)
+    record.put("pay_product_ids", payProductids)
+    record.put("city_id", cityId)
+    record
+  }
 }

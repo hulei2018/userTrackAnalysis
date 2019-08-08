@@ -1,6 +1,6 @@
 package com.usertrack.spark.session
 
-import com.alibaba.fastjson.JSONObject
+import com.alibaba.fastjson.{JSONArray, JSONObject}
 import com.usertrack.conf.ConfigurationManager
 import com.usertrack.dao.factory.TaskFactory
 import com.usertrack.util.{DateUtils, ParamUtils, StringUtils}
@@ -8,6 +8,7 @@ import com.usertrack.constant.Constants
 import com.usertrack.jdbc.Jdbc_Help
 import com.usertrack.mock.MockDataUtils
 import com.usertrack.spark.util.{JSONUtil, SparkUtils}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
@@ -144,8 +145,8 @@ object UserVisitActionAnalyzerSpark {
             val times = iter.map(_._2)
             val maxTimestamp = times.max
             val minTimestamp = times.min
-            val length=maxTimestamp-minTimestamp
-            ((day, hour, sessionID),length)
+            val length = maxTimestamp - minTimestamp
+            ((day, hour, sessionID), length)
           }
         }
         // 5.3. 返回结果
@@ -154,31 +155,31 @@ object UserVisitActionAnalyzerSpark {
     }
     dayAndHour2SessionLengthRDD.cache()
     //每个时段的会话个数
-    val dayAndHour2SessionCount: Array[((String, Int), Int)] =dayAndHour2SessionLengthRDD.map(v=>((v._1._1,v._1._2),1))
-      .reduceByKey(_+_)
+    val dayAndHour2SessionCount: Array[((String, Int), Int)] = dayAndHour2SessionLengthRDD.map(v => ((v._1._1, v._1._2), 1))
+      .reduceByKey(_ + _)
       .collect()
     //每个小时内的会话的总长度
-    val dayAndHour2SessionLength: Array[((String, Int), Long)] =dayAndHour2SessionLengthRDD.map(v=>((v._1._1,v._1._2),v._2))
-      .reduceByKey(_+_)
+    val dayAndHour2SessionLength: Array[((String, Int), Long)] = dayAndHour2SessionLengthRDD.map(v => ((v._1._1, v._1._2), v._2))
+      .reduceByKey(_ + _)
       .collect()
     //每个小时内无效的会话个数
-    val invalidDayAndHourSessionLength: Array[((String, Int), Int)] =dayAndHour2SessionLengthRDD.filter(_._2<1000)
-      .map(tuple=>((tuple._1._1,tuple._1._2),1))
-      .reduceByKey(_+_)
+    val invalidDayAndHourSessionLength: Array[((String, Int), Int)] = dayAndHour2SessionLengthRDD.filter(_._2 < 1000)
+      .map(tuple => ((tuple._1._1, tuple._1._2), 1))
+      .reduceByKey(_ + _)
       .collect()
     dayAndHour2SessionLengthRDD.unpersist()
 
     // 保存模块一的结果
-    this.saveSessionAggrResult(sc,taskID,totalsessionCount,sessionLengthSum,invalidSessionLength,preSessionLengthLevelSessionCount,dayAndHour2SessionCount,dayAndHour2SessionLength,invalidDayAndHourSessionLength)
+    this.saveSessionAggrResult(sc, taskID, totalsessionCount, sessionLengthSum, invalidSessionLength, preSessionLengthLevelSessionCount, dayAndHour2SessionCount, dayAndHour2SessionLength, invalidDayAndHourSessionLength)
 
     /**
-      *五、计算需求二：
+      * 五、计算需求二：
       *
       *
       *
       */
 
-//    六、需求三: 获取点击、下单、支付次数前10的各个品类的各种操作的次数
+    //    六、需求三: 获取点击、下单、支付次数前10的各个品类的各种操作的次数
     /**
       * 点击、下单、支付是三种不同的操作，需求获取每个操作中触发次数最多的前10个品类(最多30个品类)
       * 对数据先按照操作类型进行分组，然后对每组数据进行计数统计，最后对每组数据进行Top10的结果获取
@@ -192,85 +193,85 @@ object UserVisitActionAnalyzerSpark {
       * d. 由于分组TopN后RDD的数据量直接降低到30条数据一下, 所以将分区数更改为1
       * e. 按照品类id合并三类操作被触发的次数（按理来讲，应该按照categoryID进行数据分区，然后对每组数据进行聚合 => RDD上的操作; 但是由于只有一个分区，调用groupByKeyAPI会存在shuffle过程，这里不太建议直接在rdd上使用groupByKey api; 直接使用mapPartitions， 然后对分区中的数据迭代器进行操作《存在一个分组合并结果的动作》）
       */
-    val top10CategoryIDAndCountRDD=Session2RecordRdd.flatMap{
-      case(sessionID,records)=>{
-        val iter=records.flatMap(record=>{
-          val clickCategoryid=record.clickCategoryid
-          val orderCategoryids=record.orderCategoryids
-          val payCategoryids=record.payCategoryids
-          if(StringUtils.isNotEmpty(clickCategoryid)){
-               Iterator.single((clickCategoryid,0))  //点击记为0
-          }else if(StringUtils.isNotEmpty(orderCategoryids)){
+    val top10CategoryIDAndCountRDD = Session2RecordRdd.flatMap {
+      case (sessionID, records) => {
+        val iter = records.flatMap(record => {
+          val clickCategoryid = record.clickCategoryid
+          val orderCategoryids = record.orderCategoryids
+          val payCategoryids = record.payCategoryids
+          if (StringUtils.isNotEmpty(clickCategoryid)) {
+            Iterator.single((clickCategoryid, 0)) //点击记为0
+          } else if (StringUtils.isNotEmpty(orderCategoryids)) {
             orderCategoryids.split(Constants.SPLIT_CATEGORY_OR_PRODUCT_ID_SEPARATOR_ESCAOE)
               .filter(_.trim.nonEmpty)
-              .map((_,1))                //下单记为1
-          }else if(StringUtils.isNotEmpty(payCategoryids)){
+              .map((_, 1)) //下单记为1
+          } else if (StringUtils.isNotEmpty(payCategoryids)) {
             payCategoryids.split(Constants.SPLIT_CATEGORY_OR_PRODUCT_ID_SEPARATOR_ESCAOE)
               .filter(_.trim.nonEmpty)
-              .map((_,2))              //支付记为2
-          }else{
+              .map((_, 2)) //支付记为2
+          } else {
             Iterator.empty
           }
         })
-        iter.map(x=>(x,1))
+        iter.map(x => (x, 1))
       }
     }
-      .reduceByKey(_+_)
-      .map(tuple=>(tuple._1._2,(tuple._1._1,tuple._2)))   //((flag,(品类id,count))
+      .reduceByKey(_ + _)
+      .map(tuple => (tuple._1._2, (tuple._1._1, tuple._2))) //((flag,(品类id,count))
       .groupByKey()
-      .flatMap{
-        case(flag,iter)=>{
-          val top10Category =iter.toList
-                            .sortWith(_._2>_._2)
-                            .slice(0,10)
-          top10Category.map{
-            case(categoryID,count)=>{
-              (categoryID,(flag,count))
+      .flatMap {
+        case (flag, iter) => {
+          val top10Category = iter.toList
+            .sortWith(_._2 > _._2)
+            .slice(0, 10)
+          top10Category.map {
+            case (categoryID, count) => {
+              (categoryID, (flag, count))
             }
           }
         }
       }
-      .coalesce(1)  //剩下30条数据，所以使用coalesce，而不是进行repartition
-      .mapPartitions(iter=>{
-        iter
-          .toList
-          .groupBy(_._1)
-          .map{
-            case(categoryID,lis)=>{
-              val categoryCount=lis.foldLeft((0,0,0))((a,b)=>{  //对每个categoryID的点击、下单、支付数进行合并
-                b._2._1 match {
-                  case 0 =>(b._2._2,a._2,a._3)
-                  case 1 =>(a._1,b._2._2,a._3)
-                  case 2 =>(a._1,a._2,b._2._2)
-                }
-              })
-              (categoryID,categoryCount)
-            }
-          }.toIterator
-      })
+      .coalesce(1) //剩下30条数据，所以使用coalesce，而不是进行repartition
+      .mapPartitions(iter => {
+      iter
+        .toList
+        .groupBy(_._1)
+        .map {
+          case (categoryID, lis) => {
+            val categoryCount = lis.foldLeft((0, 0, 0))((a, b) => { //对每个categoryID的点击、下单、支付数进行合并
+              b._2._1 match {
+                case 0 => (b._2._2, a._2, a._3)
+                case 1 => (a._1, b._2._2, a._3)
+                case 2 => (a._1, a._2, b._2._2)
+              }
+            })
+            (categoryID, categoryCount)
+          }
+        }.toIterator
+    })
     top10CategoryIDAndCountRDD.cache()
 
     //将结果输出到jdbc数据库中，后续补充
-    top10CategoryIDAndCountRDD.foreachPartition(iter=>{
+    top10CategoryIDAndCountRDD.foreachPartition(iter => {
       val jdbc_helper = Jdbc_Help.getIntants
-      Try{
-        val con=jdbc_helper.getConnection
-        val oldcommit=con.getAutoCommit
+      Try {
+        val con = jdbc_helper.getConnection
+        val oldcommit = con.getAutoCommit
         con.setAutoCommit(false)
-        val sql="INSERT INTO tb_task_top10_category(`task_id`,`category_id`,`click_count`,`order_count`,`pay_count`) VALUES(?,?,?,?,?)"
-        val pstm=con.prepareStatement(sql)
-        var recordCount=0
-        iter.foreach{
-          case (categoryID, (clickCount, orderCount, payCount)) =>{
-            pstm.setLong(1,taskID)
-            pstm.setString(2,categoryID)
-            pstm.setInt(3,clickCount)
-            pstm.setInt(4,orderCount)
-            pstm.setInt(5,payCount)
+        val sql = "INSERT INTO tb_task_top10_category(`task_id`,`category_id`,`click_count`,`order_count`,`pay_count`) VALUES(?,?,?,?,?)"
+        val pstm = con.prepareStatement(sql)
+        var recordCount = 0
+        iter.foreach {
+          case (categoryID, (clickCount, orderCount, payCount)) => {
+            pstm.setLong(1, taskID)
+            pstm.setString(2, categoryID)
+            pstm.setInt(3, clickCount)
+            pstm.setInt(4, orderCount)
+            pstm.setInt(5, payCount)
             //启动批次
             pstm.addBatch()
-            recordCount+=1
-            if(recordCount%500==0){
+            recordCount += 1
+            if (recordCount % 500 == 0) {
               pstm.executeBatch()
               con.commit()
             }
@@ -279,20 +280,142 @@ object UserVisitActionAnalyzerSpark {
         //不足500条在单独进行提交
         pstm.executeBatch()
         con.commit()
-        (oldcommit,con)
-      }match {
-        case Success((oldcommit,con))=>{
+        (oldcommit, con)
+      } match {
+        case Success((oldcommit, con)) => {
           con.setAutoCommit(oldcommit)
           jdbc_helper.returnConnetion(con)
         }
-        case Failure(exception)=>{
+        case Failure(exception) => {
           jdbc_helper.returnConnetion(null)
           throw exception
         }
       }
     })
+    //七、需求四：获取Top10品类中各个品类被触发的Session中，Session访问数量最多的前10
+    /**
+      * 触发：点击、下单、支付三种操作中的任意一种
+      * 如果在一个会话中，某种操作被触发的多次，那么就计算多次，不涉及数据去重
+      * 最终结果：sessionID和各种操作的触发次数报道到JDBC中；同时将具体的session数据保存HDFS
+      * 步骤：
+      * a. 计算获取Top10的session信息(包含：ID和触发次数)
+      * b. 结果保存
+      * c. 具体session信息获取，并保存HDFS
+      **/
+    val top10CategoryID = top10CategoryIDAndCountRDD.collect().map(_._1)
+    val top10BroacastCategoryID = sc.broadcast(top10CategoryID)
+
+    val top10Category2SessionCountRDD = Session2RecordRdd.mapPartitions(iter => {
+      val top10BroacastCategoryIDValue = top10BroacastCategoryID.value
+      iter.flatMap {
+        case (sessionID, records) => {
+          val categoryAndFlag = records
+            .flatMap(record => {
+              val clickCategoryid = record.clickCategoryid
+              val orderCategoryids = record.orderCategoryids
+              val payCategoryids = record.payCategoryids
+              if (StringUtils.isNotEmpty(clickCategoryid)) {
+                Iterator.single((clickCategoryid, 0))
+              } else if (StringUtils.isNotEmpty(orderCategoryids)) {
+                orderCategoryids
+                  .split(Constants.SPLIT_CATEGORY_OR_PRODUCT_ID_SEPARATOR_ESCAOE)
+                  .filter(_.trim.nonEmpty)
+                  .map((_, 1)) // orderCategoryids别记为1
+              } else if (StringUtils.isNotEmpty(payCategoryids)) {
+                payCategoryids.split(Constants.SPLIT_CATEGORY_OR_PRODUCT_ID_SEPARATOR_ESCAOE)
+                  .filter(_.trim.nonEmpty)
+                  .map((_, 2)) //payCategoryids类别记为2
+
+              } else {
+                Iterator.empty
+              }
+            }).filter(v => v._1.contains(top10BroacastCategoryIDValue))
+
+          //求取在当前会话中触发的次数
+          val categoryIDAndflagCount = categoryAndFlag
+            .groupBy(v => v)
+            .map(tuple => ((tuple._1._1, tuple._1._2), tuple._2.size)).toIterator
+          categoryIDAndflagCount
+            .map {
+              case ((castegoryID, flag), count) => {
+                ((castegoryID, flag), (sessionID, count))
+              }
+            }
+        }
+      }
+    })
+      .groupByKey() //不同会话触发品类次数的session的top10
+      .map {
+      case ((categoryID, flag), iter) => {
+        val top10SessionID2CountIter = iter
+          .toList
+          .sortWith(_._2 > _._2)
+          .slice(0, 10)
+
+        ((categoryID, flag), top10SessionID2CountIter)
+      }
+    }
+
+    top10Category2SessionCountRDD.cache()
+    //不同会话触发品类次数的session的top10转化为(categoryID,((点击sessionID,count),(下单sessionID,count),(支付sessionID,count)))
+    top10Category2SessionCountRDD
+      .map(tuple=>(tuple._1._1,(tuple._1._2,tuple._2)))
+      .groupByKey()
+      .map{
+        case(categoryID,iter)=>{
+        val sessionIDAndcount=iter.foldLeft("","","")((a,b)=>{
+          val sessionIDAndcount2Json=b._2
+            .foldLeft(new JSONArray())((aa,bb)=>{
+              val json=new JSONObject()
+              json.put("sessionID",bb._1)
+              json.put("count",bb._2)
+              aa.add(json)
+              aa
+            }).toJSONString
+          b._1 match{
+            case 0=>(sessionIDAndcount2Json,a._2,a._3)
+            case 1=>(a._1,sessionIDAndcount2Json,a._3)
+            case 2=>(a._1,a._2,sessionIDAndcount2Json)
+          }
+         })
+          (categoryID,sessionIDAndcount)
+        }
+      }
+      .foreachPartition(iter=>{
+        iter.foreach(println(_))
+      })
+
+    //将数据写入到数据库--后续补充
+
+    // 4. 获取具体会话信息(根据会话id来获取)
+    val preCategoryTop10SessionDataSavePath = s"/spark/project/top10_category_session/task_${taskID}"
+    //删除已存在的路径
+    FileSystem.get(sc.hadoopConfiguration).delete(new Path(preCategoryTop10SessionDataSavePath),true)
+
+    //获取top10Category2SessionCountRDD的sessionID
+    val preCategoryTop10SessionId=top10Category2SessionCountRDD.flatMap(v=>
+      v._2.map(_._1)
+    )
+    .collect()
+    .distinct
+
+    val broadcastCategoryTop10SessionId=sc.broadcast(preCategoryTop10SessionId)
+    val top10SessionRecords=Session2RecordRdd.filter(t=>broadcastCategoryTop10SessionId.value.contains(t._1))
+      .map{
+        case(sessionID,records)=>{
+          records.map(record=>record.trans2JsonObject().toJSONString)
+        }
+      }
+      .saveAsTextFile(preCategoryTop10SessionDataSavePath)
+
+    //清理缓存
+    top10Category2SessionCountRDD.unpersist()
+    top10CategoryIDAndCountRDD.unpersist()
+    broadcastCategoryTop10SessionId.unpersist(true)
+    top10BroacastCategoryID.unpersist(true)
 
   }
+
 
   def filterData(spark: SparkSession, taskParam: JSONObject): RDD[UserVisitSessionRecord] = {
     //获取过滤的参数
@@ -352,19 +475,19 @@ object UserVisitActionAnalyzerSpark {
 
   //打印需求一的结果
   def saveSessionAggrResult(
-                           sc:SparkContext,
-                           taskID:Long,
-                           totalSessionCnt:Long,
-                           totalSessionSum:Double,
-                           invalidSessionCount:Long,
-                           preSessionLengthLevelSessionCount:Array[(String, Int)],
-                           dayAndHour2SessionCount: Array[((String, Int), Int)],
-                           dayAndHour2SessionLength: Array[((String, Int), Long)],
-                           invalidDayAndHourSessionLength: Array[((String, Int), Int)]
-                           ): Unit ={
-   val json=JSONUtil.mergeSessionAggrResultToJSONString(totalSessionCnt,totalSessionSum,invalidSessionCount,preSessionLengthLevelSessionCount,dayAndHour2SessionCount,dayAndHour2SessionLength,invalidDayAndHourSessionLength)
-//   也可以将json格式进行保存到数据库
-   println(json)
+                             sc: SparkContext,
+                             taskID: Long,
+                             totalSessionCnt: Long,
+                             totalSessionSum: Double,
+                             invalidSessionCount: Long,
+                             preSessionLengthLevelSessionCount: Array[(String, Int)],
+                             dayAndHour2SessionCount: Array[((String, Int), Int)],
+                             dayAndHour2SessionLength: Array[((String, Int), Long)],
+                             invalidDayAndHourSessionLength: Array[((String, Int), Int)]
+                           ): Unit = {
+    val json = JSONUtil.mergeSessionAggrResultToJSONString(totalSessionCnt, totalSessionSum, invalidSessionCount, preSessionLengthLevelSessionCount, dayAndHour2SessionCount, dayAndHour2SessionLength, invalidDayAndHourSessionLength)
+    //   也可以将json格式进行保存到数据库
+    println(json)
   }
 
 }

@@ -1,5 +1,6 @@
 package com.usertrack
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
@@ -16,7 +17,7 @@ object wc {
 
     val sc=SparkContext.getOrCreate(conf)
     val textFile=sc.makeRDD(arr)
-    val wc=textFile.flatMap(_.split(","))
+    val wc =textFile.flatMap(_.split(","))
       .map((_,1))
 
 //      .aggregateByKey(0)(
