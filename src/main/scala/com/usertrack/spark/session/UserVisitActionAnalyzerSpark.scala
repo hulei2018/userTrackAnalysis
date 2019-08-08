@@ -52,6 +52,7 @@ object UserVisitActionAnalyzerSpark {
     })
     // 2.2sparkContext对象的构建
     val sc = SparkUtils.generateSparkContext(conf)
+    sc.setLogLevel("error")
 
     //2.3 如果是本地的话读取数据，不用集成enableHive，如果提交到集群数据是存储在Hive中
     val spark = SparkUtils.loadDatas(islocal, appName, sc, generateMockData = (sc: SparkContext, df: SparkSession) => {
@@ -292,6 +293,7 @@ object UserVisitActionAnalyzerSpark {
         }
       }
     })
+
     //七、需求四：获取Top10品类中各个品类被触发的Session中，Session访问数量最多的前10
     /**
       * 触发：点击、下单、支付三种操作中的任意一种
@@ -329,7 +331,11 @@ object UserVisitActionAnalyzerSpark {
               } else {
                 Iterator.empty
               }
-            }).filter(v => v._1.contains(top10BroacastCategoryIDValue))
+            }).filter{
+            case(categoryID,_)=>{
+              top10BroacastCategoryIDValue.contains(categoryID)
+            }
+          }
 
           //求取在当前会话中触发的次数
           val categoryIDAndflagCount = categoryAndFlag
@@ -382,10 +388,49 @@ object UserVisitActionAnalyzerSpark {
         }
       }
       .foreachPartition(iter=>{
-        iter.foreach(println(_))
-      })
+        // TODO: 作业将数据输出到表tb_task_top10_category_session
+        val jdbc_helper=Jdbc_Help.getIntants
+        Try{
+          val con=jdbc_helper.getConnection
+          val oldcommit=con.getAutoCommit
+          con.setAutoCommit(false)
+          val sql="INSERT INTO tb_task_top10_category_session(`task_id`,`category_id`,`click_sessions`,`order_sessions`,`pay_sessions`) VALUES(?,?,?,?,?)"
+          val pstm=con.prepareStatement(sql)
+          var recordCount=0
+          iter.foreach{
+            case(categoryID,(click_sessions,order_sessions,pay_sessions))=>{
+              pstm.setLong(1,taskID)
+              pstm.setString(2,categoryID)
+              pstm.setString(3,click_sessions)
+              pstm.setString(4,order_sessions)
+              pstm.setString(5,pay_sessions)
+              recordCount+=1
+              pstm.addBatch()
+              if(recordCount%500==0){
+                pstm.executeBatch()
+                con.commit()
+              }
+            }
+          }
+          pstm.executeBatch()
+          con.commit()
+          (oldcommit,con)
+        }match {
+          case Success((oldcommit,con))=>{
+            con.setAutoCommit(oldcommit)
+            jdbc_helper.returnConnetion(con)
+          }
+          case Failure(exception)=>{
+            jdbc_helper.returnConnetion(null)
+              throw exception
+            }
+        }
+       }
+      )
+
 
     //将数据写入到数据库--后续补充
+
 
     // 4. 获取具体会话信息(根据会话id来获取)
     val preCategoryTop10SessionDataSavePath = s"/spark/project/top10_category_session/task_${taskID}"
@@ -400,8 +445,8 @@ object UserVisitActionAnalyzerSpark {
     .distinct
 
     val broadcastCategoryTop10SessionId=sc.broadcast(preCategoryTop10SessionId)
-    val top10SessionRecords=Session2RecordRdd.filter(t=>broadcastCategoryTop10SessionId.value.contains(t._1))
-      .map{
+    Session2RecordRdd.filter(t=>broadcastCategoryTop10SessionId.value.contains(t._1))
+      .flatMap{
         case(sessionID,records)=>{
           records.map(record=>record.trans2JsonObject().toJSONString)
         }
