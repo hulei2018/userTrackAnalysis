@@ -8,7 +8,7 @@ import com.usertrack.constant.Constants
 import com.usertrack.util.DateUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.mutable.ArrayBuffer
@@ -21,7 +21,7 @@ object MockDataUtils {
   val random = ThreadLocalRandom.current()
   val splitSymbol = ","
   // 用户数量
-  val userNumbers = 100000
+  val userNumbers = 5000000
   // 用户每天访问的PV数量上限(50万)
   val userVisitSessionNumbers = 500000
   // 商品数量（100万）
@@ -50,8 +50,8 @@ object MockDataUtils {
     val sc = SparkContext.getOrCreate(conf)
     // ===========================
     val fs = FileSystem.get(sc.hadoopConfiguration)   //HDFS
-    val userInfoDataSavePath = "data/mock/user_info"
-    val userVisitActionSavePath = "data/mock/user_visit_action"
+    val userInfoDataSavePath = "/spark/project/data/mock/user_info"
+    val userVisitActionSavePath = "/spark/project/data/mock/user_visit_action"
     fs.delete(new Path(userInfoDataSavePath), true)
     fs.delete(new Path(userVisitActionSavePath), true)
 
@@ -472,7 +472,7 @@ object MockDataUtils {
     */
   def loadProductInfoMockData(sc: SparkContext, sqlContext: SQLContext): Unit = {
     val fs = FileSystem.get(sc.hadoopConfiguration)
-    val productInfoDataSavePathStr = "data/mock/product_info"
+    val productInfoDataSavePathStr = "/spark/project/data/mock/user_info"
     val productInfoDataSavePath = new Path(productInfoDataSavePathStr)
 
     val productInfoRDD: RDD[ProductInfo] = {
@@ -503,9 +503,9 @@ object MockDataUtils {
     * 产生模拟数据
     *
     * @param sc
-    * @param sqlContext
+    * @param spark
     */
-  def mockData(sc: SparkContext, sqlContext: SQLContext): Unit = {
+  def mockData(sc: SparkContext, spark: SparkSession): Unit = {
     val fs = FileSystem.get(sc.hadoopConfiguration)
     val userInfoDataSavePathStr = "/spark/project/data/mock/user_info"
       val userInfoDataSavePath = new Path(userInfoDataSavePathStr)
@@ -529,19 +529,20 @@ object MockDataUtils {
     val userInfoRDD: RDD[String] = sc.textFile(userInfoDataSavePathStr)
     val userVisitActionRDD: RDD[String] = sc.textFile(userVisitActionSavePathStr)
     // 开始转换为DataFrame并注册成为表
-    import sqlContext.implicits._
+    import spark.implicits._
     userInfoRDD
       .map(line => UserInfo.parseUserInfo(line))
       .filter(_.isDefined)
       .map(_.get)
       .toDF(UserInfo.columnNames: _*)
-      .registerTempTable("user_info")
+      .createTempView("user_info")
+
     userVisitActionRDD
       .map(line => UserVisitAction.parseUserVisitAction(line)) //RDD[Option[UserInfo]]
       .filter(_.isDefined)
       .map(_.get)   //RDD[UserInfo]
       .toDF(UserVisitAction.columnNames: _*)
-      .registerTempTable("user_visit_action")
+      .createTempView("user_visit_action")
   }
 }
 

@@ -49,7 +49,7 @@ public class Jdbc_Help {
     }
 
     //4、生成connection连接
-    private synchronized Connection getConnection(){
+    public synchronized  Connection getConnection(){
         if(datasource.size()==0){
             try {
                 Thread.sleep(1000);

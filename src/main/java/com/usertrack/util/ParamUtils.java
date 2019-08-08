@@ -2,6 +2,7 @@ package com.usertrack.util;
 
 import com.alibaba.fastjson.JSONObject;
 import com.usertrack.bean.Task;
+import scala.Option;
 
 public class ParamUtils {
     /**
@@ -29,5 +30,20 @@ public class ParamUtils {
              return taskParam;
          }
          return null;
+    }
+
+    /**
+     * 对json格式进行解析
+     * @param jsonObject
+     * @param field
+     * @return 参数
+     */
+    public static Option<String> getParam(JSONObject jsonObject,String field){
+        String value = jsonObject.getString(field);
+        if(value==null || value.trim().isEmpty()){
+            return Option.apply(null); //返回None
+        }else {
+            return Option.apply(value); //返回Some值
+        }
     }
 }

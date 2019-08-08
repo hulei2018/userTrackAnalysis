@@ -1,6 +1,11 @@
 package com.usertrack.spark.util
 
+<<<<<<< HEAD
 import org.apache.spark.SparkConf
+=======
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SparkSession
+>>>>>>> d1dbf5839b80b229a874fcd0c3cc1ee061f572a5
 
 /**
   * @author: Jeremy Hu
@@ -8,19 +13,40 @@ import org.apache.spark.SparkConf
   * @date: 2019/7/25
   */
 object SparkUtils {
-  def generateSparkConf(apps: String, islocal: Boolean): SparkConf = {
-    val conf = if (islocal) {
+  def generateSparkConf(apps: String, islocal: Boolean,setSparkParam:(SparkConf)=>Unit=Unit=>{}): SparkConf = {
+    val conf=if(islocal){
       new SparkConf()
         .setAppName(apps)
         .setMaster("local[*]")
-    } else {
+
+    }else{
       new SparkConf()
         .setAppName(apps)
     }
     conf.set("spark.sql.shuffle.partitions", "10")
     // RDD进行数据cache的时候，内存最多允许存储的大小（占executor的内存比例），默认0.6
-    // 如果内存不够，可能有部分数据不会进行cache(CacheManager会对cache的RDD数据进行管理操作<删除不会用的RDD缓存>)
-    conf.set("spark.memory.fraction","0.6")
-    conf.set("","")
+    conf.set("spark.storage.memoryFraction", "0.6")
+    // RDD进行shuffle的时候，shuffle数据写内存的阈值(占executor的内存比例），默认0.2
+    conf.set("spark.shuffle.memoryFraction", "0.2")
+    // 启动固定的内存分配模型，默认使用动态的内存模式
+    conf.set("spark.memory.useLegacyMode", "true")
+    setSparkParam(conf)
+    conf
+  }
+  def generateSparkContext(conf:SparkConf):SparkContext=SparkContext.getOrCreate(conf)
+
+  def loadDatas(islocal:Boolean,apps:String,sc:SparkContext,generateMockData:(SparkContext,SparkSession)=>Unit=(sc:SparkContext,spark:SparkSession)=>{}): SparkSession ={
+    val spark=if(islocal){
+      SparkSession.builder()
+        .master("local[*]")
+        .appName(apps)
+        .getOrCreate()
+          }else{
+      SparkSession.builder()
+        .appName(apps)
+        .getOrCreate()
+    }
+    generateMockData(sc,spark)
+    spark
   }
 }
