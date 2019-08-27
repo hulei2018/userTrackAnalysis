@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import com.usertrack.conf.ConfigurationManager
 import com.usertrack.constant.Constants
-import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -24,13 +24,12 @@ object AdClickDataMock {
     val running: AtomicBoolean = new AtomicBoolean(true)
 
     val brokerList = ConfigurationManager.getProperty(Constants.KAFKA_METADATA_BROKER_LIST)
-    println(brokerList)
     val props = new Properties()
     props.put("metadata.broker.list", brokerList)
-    props.put("serializer.class", "kafka.serializer.StringEncoder")
+    props.put("key.serializer","org.apache.kafka.common.serialization.StringSerializer")
+    props.put("value.serializer","org.apache.kafka.common.serialization.StringSerializer")
 
-    val config: ProducerConfig = new ProducerConfig(props)
-    val producer = new Producer[String, String](config)
+    val producer=new KafkaProducer[String,String](props)
 
     for (i <- 0 until 2) {
       new Thread(new Runnable {
@@ -67,7 +66,7 @@ object AdClickDataMock {
     *
     * @return
     */
-  def generateMessage(random: Random): List[KeyedMessage[String, String]] = {
+  def generateMessage(random: Random): List[ProducerRecord[String, String]] = {
     val key = random.nextInt(100).toString
     // 0-999
     val cityId = random.nextInt(1000)
@@ -84,12 +83,11 @@ object AdClickDataMock {
       1
     }
 
-    val msgs = (0 until numbers).foldLeft(ArrayBuffer[KeyedMessage[String, String]]())((buf, b) => {
+    val msgs = (0 until numbers).foldLeft(ArrayBuffer[ProducerRecord[String, String]]())((buf, b) => {
       val timestamp = System.currentTimeMillis()
       val value = s"${timestamp}${delimeter}${str}"
       //topic， message key， partition key， message value
-      val msg = KeyedMessage[String, String](topicName, key, key, value)
-
+      val msg: ProducerRecord[String, String] =new ProducerRecord[String,String](topicName,key,value)
       buf += msg
       buf
     })

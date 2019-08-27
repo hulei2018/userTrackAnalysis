@@ -12,9 +12,14 @@ public interface Constants {
     String JDBC_PASSWORD="jdbc_password";
     String JDBC_DATASOURCE_SIZE="jdbc_datasource_size";
     String SPARK_APP_NAME="userTrackAnalysis";
+    String SPARK_APP_NAME_PRODUCT="AreaTop3ProductSpark_";
+    String SPARK_APP_NAME_AD = "AdClickRealTimeStateSpark";
     String ISLOCAL="is_local";
     String START_DATE="startDate";
     String END_DATE="endDate";
     String SEX="sex";
     String PROFESSIONALS="professionals";
+
+    String KAFKA_TOPICS = "kafka.topics";
+    String KAFKA_AD_TOPICS = "kafka.ad.topics";
 }

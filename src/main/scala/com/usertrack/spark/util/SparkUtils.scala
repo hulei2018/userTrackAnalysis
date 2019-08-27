@@ -10,7 +10,7 @@ import org.apache.spark.sql.SparkSession
   * @date: 2019/7/25
   */
 object SparkUtils {
-  def generateSparkConf(apps: String, islocal: Boolean,setSparkParam:(SparkConf)=>Unit=Unit=>{}): SparkConf = {
+  def generateSparkConf(apps: String, islocal: Boolean,setSparkParam:SparkConf=>Unit{}): SparkConf = {
     val conf=if(islocal){
       new SparkConf()
         .setAppName(apps)
@@ -32,7 +32,7 @@ object SparkUtils {
   }
   def generateSparkContext(conf:SparkConf):SparkContext=SparkContext.getOrCreate(conf)
 
-  def loadDatas(islocal:Boolean,apps:String,sc:SparkContext,generateMockData:(SparkContext,SparkSession)=>Unit=(sc:SparkContext,spark:SparkSession)=>{}): SparkSession ={
+  def loadDatas(islocal:Boolean=true,apps:String,sc:SparkContext,generateMockData:(SparkContext,SparkSession)=>Unit=(sc,spark)=>{}): SparkSession ={
     val spark=if(islocal){
       SparkSession.builder()
         .master("local[*]")
@@ -41,6 +41,7 @@ object SparkUtils {
           }else{
       SparkSession.builder()
         .appName(apps)
+        .enableHiveSupport()
         .getOrCreate()
     }
     generateMockData(sc,spark)

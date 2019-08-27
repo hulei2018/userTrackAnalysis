@@ -8,7 +8,7 @@ import com.usertrack.constant.Constants
 import com.usertrack.util.DateUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.mutable.ArrayBuffer
@@ -468,11 +468,11 @@ object MockDataUtils {
     * 加载商品模拟信息
     *
     * @param sc
-    * @param sqlContext
+    * @param spark
     */
-  def loadProductInfoMockData(sc: SparkContext, sqlContext: SQLContext): Unit = {
+  def loadProductInfoMockData(sc: SparkContext, spark: SparkSession): Unit = {
     val fs = FileSystem.get(sc.hadoopConfiguration)
-    val productInfoDataSavePathStr = "/spark/project/data/mock/user_info"
+    val productInfoDataSavePathStr = "/spark/project/data/mock/product_info"
     val productInfoDataSavePath = new Path(productInfoDataSavePathStr)
 
     val productInfoRDD: RDD[ProductInfo] = {
@@ -493,10 +493,11 @@ object MockDataUtils {
     }
 
     // 转换为DF并注册成为表
-    import sqlContext.implicits._
+    import spark.implicits._
     productInfoRDD
       .toDF(ProductInfo.columnNames: _*)
       .registerTempTable("product_info")
+
   }
 
   /**

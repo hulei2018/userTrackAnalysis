@@ -28,16 +28,16 @@ object UserVisitActionAnalyzerSpark {
     val taskID = ParamUtils.getTaskIdFromArgs(args);
     //1.2 获取任务信息
     val task = if (taskID == null) {
-      throw new IllegalArgumentException(s"不合法的参数输入${taskID}");
+      throw new IllegalArgumentException(s"不合法的参数输入${taskID}")
     } else {
-      val taskDao = TaskFactory.taskFactory();
-      taskDao.findTaskById(taskID);
+      val taskDao = TaskFactory.taskFactory()
+      taskDao.findTaskById(taskID)
     }
     // 3.获取任务的参数
     val taskParam = if (task == null) {
       throw new IllegalArgumentException(s"从数据库获取的ID没有对应taskParam${taskID}")
     } else {
-      ParamUtils.getTaskParam(task);
+      ParamUtils.getTaskParam(task)
     }
     if (taskParam == null || taskParam.isEmpty) {
       throw new IllegalArgumentException(s"不支持param数据为空的过滤${taskID}")
@@ -45,14 +45,14 @@ object UserVisitActionAnalyzerSpark {
 
     //二、获取上下文创建的环境
     // 2.1 创建spark的运行环境
-    val appName = Constants.SPARK_APP_NAME + taskID;
+    val appName = Constants.SPARK_APP_NAME + taskID
     val islocal = ConfigurationManager.getBoolean(Constants.ISLOCAL)
     val conf = SparkUtils.generateSparkConf(appName, islocal, setSparkParam = (that: SparkConf) => {
       // 可以单独设置参数，以供使用
     })
     // 2.2sparkContext对象的构建
     val sc = SparkUtils.generateSparkContext(conf)
-    sc.setLogLevel("error")
+
 
     //2.3 如果是本地的话读取数据，不用集成enableHive，如果提交到集群数据是存储在Hive中
     val spark = SparkUtils.loadDatas(islocal, appName, sc, generateMockData = (sc: SparkContext, df: SparkSession) => {
@@ -97,8 +97,8 @@ object UserVisitActionAnalyzerSpark {
       case (sessionID, records) => {
         val session_id = sessionID
         val actionTimeStamps: Iterable[Long] = records.map(r => {
-          val actionTime = r.actionTime;
-          val timeStamp = DateUtils.parseDate2Long(actionTime);
+          val actionTime = r.actionTime
+          val timeStamp = DateUtils.parseDate2Long(actionTime)
           timeStamp
         })
         val maxTimeStamp = actionTimeStamps.max
